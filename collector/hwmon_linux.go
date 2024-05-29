@@ -32,8 +32,9 @@ import (
 )
 
 var (
-	collectorHWmonChipInclude = kingpin.Flag("collector.hwmon.chip-include", "Regexp of hwmon chip to include (mutually exclusive to device-exclude).").String()
-	collectorHWmonChipExclude = kingpin.Flag("collector.hwmon.chip-exclude", "Regexp of hwmon chip to exclude (mutually exclusive to device-include).").String()
+	collectorHWmonChipInclude         = kingpin.Flag("collector.hwmon.chip-include", "Regexp of hwmon chip to include (mutually exclusive to device-exclude).").String()
+	collectorHWmonChipExclude         = kingpin.Flag("collector.hwmon.chip-exclude", "Regexp of hwmon chip to exclude (mutually exclusive to device-include).").String()
+	collectorHwmonChipnamePreferLabel = kingpin.Flag("collector.hwmon.chip-name-prefer-label", "Use label attribute of hwmon if exists").Default("false").Bool()
 
 	hwmonInvalidMetricChars = regexp.MustCompile("[^a-z0-9:_]")
 	hwmonFilenameFormat     = regexp.MustCompile(`^(?P<type>[^0-9]+)(?P<id>[0-9]*)?(_(?P<property>.+))?$`)
@@ -365,9 +366,20 @@ func (c *hwMonCollector) hwmonName(dir string) (string, error) {
 	// human readable names would be bat0 or coretemp, while a path string
 	// could be platform_applesmc.768
 
-	// preference 1: construct a name based on device name, always unique
-
 	devicePath, devErr := filepath.EvalSymlinks(filepath.Join(dir, "device"))
+
+	if *collectorHwmonChipnamePreferLabel {
+		labelRaw, labelErr := os.ReadFile(filepath.Join(dir, "label"))
+
+		if labelErr == nil && string(labelRaw) != "" {
+			cleanName := cleanMetricName(string(labelRaw))
+			if cleanName != "" {
+				return cleanName, nil
+			}
+		}
+	}
+
+	// preference 1: construct a name based on device name, always unique
 	if devErr == nil {
 		devPathPrefix, devName := filepath.Split(devicePath)
 		_, devType := filepath.Split(strings.TrimRight(devPathPrefix, "/"))
